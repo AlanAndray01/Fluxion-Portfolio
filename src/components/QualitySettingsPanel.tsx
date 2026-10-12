@@ -6,6 +6,7 @@ import {
   overrideQualityTier,
   resetToAutoDetectedTier,
   getDebugInfo,
+  CONFIG_UPDATED,
 } from '@/utils/deviceConfig';
 import { DeviceTier } from '@/utils/performanceDetector';
 import './QualitySettingsPanel.css';
@@ -29,11 +30,14 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
     }, 0);
 
     const handleOpen = () => setIsExpanded(true);
+    const handleConfig = () => setConfig(getDeviceConfig());
+    window.addEventListener(CONFIG_UPDATED, handleConfig);
     window.addEventListener('open-quality-settings', handleOpen);
 
     return () => {
       clearTimeout(timer);
       window.removeEventListener('open-quality-settings', handleOpen);
+      window.removeEventListener(CONFIG_UPDATED, handleConfig);
     };
   }, []);
 
@@ -55,7 +59,7 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
     window.location.reload();
   };
 
-  const currentTier = config.userOverride || config.metrics.detectedTier;
+  const currentTier = config.tier;
   const isOverridden = config.userOverride !== null;
 
   return (
@@ -85,6 +89,7 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
               {isOverridden && (
                 <p className="override-note">Manual override active</p>
               )}
+              {!isOverridden && <p className="override-note">{config.autoAdjusted ? 'Auto: adjusted for smoother playback' : 'Auto quality active'}</p>}
             </div>
 
             {/* Tier Selection Buttons */}
@@ -124,6 +129,14 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
 
             {/* Quick Stats */}
             <div className="quick-stats">
+              <div className="stat">
+                <span className="stat-label">Live FPS:</span>
+                <span className="stat-value" data-testid="live-fps">{config.liveFPS === null ? 'Paused' : Math.round(config.liveFPS)}</span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Bloom:</span>
+                <span className="stat-value">{config.preset.postProcessingEnabled && config.preset.bloomEnabled ? 'On' : 'Off'}</span>
+              </div>
               <div className="stat">
                 <span className="stat-label">CPU Cores:</span>
                 <span className="stat-value">{config.metrics.cpuCores}</span>

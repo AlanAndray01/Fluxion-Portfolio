@@ -12,6 +12,7 @@ import {
   isMediumTier,
   isHighTier,
   DeviceConfigStore,
+  QUALITY_UPDATED,
 } from '@/utils/deviceConfig';
 import { QualityPreset } from '@/utils/qualityPresets';
 import { DeviceTier } from '@/utils/performanceDetector';
@@ -34,7 +35,7 @@ export function useDeviceConfig(): UseDeviceConfigReturn | null {
 
   useEffect(() => {
     // Use a callback approach to avoid cascading renders
-    const timer = setTimeout(() => {
+    const update = () => {
       try {
         const config = getDeviceConfig();
         setData({
@@ -49,9 +50,14 @@ export function useDeviceConfig(): UseDeviceConfigReturn | null {
         // Config not ready yet
         setData(null);
       }
-    }, 0);
+    };
+    const timer = setTimeout(update, 0);
+    window.addEventListener(QUALITY_UPDATED, update);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(QUALITY_UPDATED, update);
+    };
   }, []);
 
   return data;

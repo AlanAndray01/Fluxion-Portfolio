@@ -22,6 +22,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { createQualityScroll } from '@/utils/qualityScroll';
 import './ProjectsSection.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -159,13 +160,11 @@ export default function ProjectsSection() {
     gsap.set('.projects-header', { opacity: 0 });
 
     // ── Scroll Animation Timeline ──────────────────────────────────────
-    ScrollTrigger.create({
+    const disposeScroll = createQualityScroll({
       trigger: section,
       start: 'top bottom',
       end: 'bottom bottom',
-      scrub: 1.2,
-      onUpdate: (self) => {
-        const p = self.progress;
+    }, (p) => {
 
         // Recalculate positions each frame
         const about = getAboutBubbleCenter();
@@ -312,7 +311,6 @@ export default function ProjectsSection() {
             });
           });
         }
-      },
     });
 
     // ── Mobile: Auto-scroll cards horizontally ─────────   
@@ -327,7 +325,8 @@ export default function ProjectsSection() {
 
     // ── Cleanup ────────────────────────────────────────────────────────        
     return () => {
-      ScrollTrigger.getAll().forEach(t => t.kill());
+      disposeScroll();
+      initialized.current = false;
       if (cardsContainer) {
         gsap.killTweensOf(cardsContainer);
       }

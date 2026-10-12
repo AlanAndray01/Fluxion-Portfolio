@@ -1,7 +1,7 @@
 /**
  * Quality Presets Configuration
  * Defines rendering parameters for each device tier
- * These are applied BEFORE the Three.js scene initializes
+ * Applied at initialization and when automatic quality changes during a session.
  */
 
 import * as THREE from 'three';
@@ -47,7 +47,7 @@ export interface QualityPreset {
   
   // Animations
   gsapAnimationsEnabled: boolean;
-  gsapScrubValue: number; // Lower = smoother but more intensive
+  gsapScrubValue: number; // Seconds for scroll animations to catch up; lower is more responsive.
   particleEffectsEnabled: boolean;
   
   // Environment

@@ -1,17 +1,18 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { wrap, transfer } from 'comlink';
+import { wrap, transfer, proxy, releaseProxy } from 'comlink';
 import styles from './3DModel.module.css';
-import { getDeviceConfig } from '@/utils/deviceConfig';
+import { getDeviceConfig, reportSceneFPS } from '@/utils/deviceConfig';
 import { getQualityPreset } from '@/utils/qualityPresets';
+import { useQualityTier } from '@/hooks/useDeviceConfig';
 
 export default function Model3D() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const workerRef = useRef<Worker | undefined>(undefined);
+  const tier = useQualityTier();
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !tier) return;
     
     const container = containerRef.current;
     
@@ -30,11 +31,13 @@ export default function Model3D() {
       offscreen = canvas.transferControlToOffscreen();
     } catch (e) {
       console.warn('OffscreenCanvas transfer failed:', e);
+      canvas.remove();
       return;
     }
     
-    workerRef.current = new Worker(new URL('../workers/three.worker.ts', import.meta.url));
-    const workerApi = wrap<import('../workers/three.worker').ThreeWorkerApi>(workerRef.current);
+    const worker = new Worker(new URL('../workers/three.worker.ts', import.meta.url));
+    const workerApi = wrap<import('../workers/three.worker').ThreeWorkerApi>(worker);
+    let disposed = false;
 
     let preset = null;
     try {
@@ -44,33 +47,51 @@ export default function Model3D() {
         console.warn('[3DModel] Device config not available, using defaults:', error);
     }
 
-    workerApi.init(transfer(offscreen, [offscreen]), container.clientWidth, container.clientHeight, window.devicePixelRatio || 1, preset);
+    const ready = workerApi.init(transfer(offscreen, [offscreen]), container.clientWidth, container.clientHeight, window.devicePixelRatio || 1, preset,
+      proxy((fps: number | null) => { if (!disposed) reportSceneFPS('model', fps); }));
+    const handleError = (error: unknown) => { if (!disposed) console.error('[3DModel]', error); };
+    void ready.catch(handleError);
+    let inViewport = false;
+    const updateVisibility = () => {
+      if (document.hidden || !inViewport) reportSceneFPS('model', null);
+      void ready.then(() => { if (!disposed) return workerApi.setVisible(inViewport && !document.hidden); }).catch(handleError);
+    };
+    const observer = new IntersectionObserver(([entry]) => {
+      inViewport = entry.isIntersecting && entry.intersectionRatio > 0;
+      updateVisibility();
+    });
+    observer.observe(container);
+    document.addEventListener('visibilitychange', updateVisibility);
 
     const onMouseMove = (e: MouseEvent) => {
         const mouseMultiplier = preset?.mouseMultiplier ?? 5;
         const mouseX = (e.clientX - window.innerWidth / 2) * mouseMultiplier;
         const mouseY = (e.clientY - window.innerHeight / 2) * mouseMultiplier;
-        workerApi.onMouseMove(mouseX, mouseY);
+        void ready.then(() => { if (!disposed) return workerApi.onMouseMove(mouseX, mouseY); }).catch(handleError);
     };
 
     const onResize = () => {
         if (!container) return;
-        workerApi.onResize(container.clientWidth, container.clientHeight);
+        void ready.then(() => { if (!disposed) return workerApi.onResize(container.clientWidth, container.clientHeight); }).catch(handleError);
     };
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('resize', onResize);
 
     return () => {
+        disposed = true;
+        observer.disconnect();
+        document.removeEventListener('visibilitychange', updateVisibility);
+        reportSceneFPS('model', null);
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('resize', onResize);
-        workerApi.cleanup();
-        workerRef.current?.terminate();
-        if (container) {
-          container.innerHTML = '';
-        }
+        void ready.then(() => workerApi.cleanup()).catch(() => {}).finally(() => {
+          workerApi[releaseProxy]();
+          worker.terminate();
+        });
+        canvas.remove();
     };
-  }, []);
+  }, [tier]);
 
   return (
     <div 
