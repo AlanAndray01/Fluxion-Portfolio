@@ -29,6 +29,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { createQualityScroll } from '@/utils/qualityScroll';
 import './AboutSection.css';
 
 
@@ -137,9 +138,6 @@ export default function AboutSection() {
 
     // ── ScrollTrigger: scrub bubble travel to scroll position ─────────────
     // We use a proxy object so we can interpolate all values together
-    const proxy = {
-      progress: 0,   // 0 = at hero, 1 = landed
-    };
 
     // Snapshot destination once (recomputed on resize)
     let dest = getAnchorCentre(anchor, END_SIZE);
@@ -155,14 +153,14 @@ export default function AboutSection() {
     };
     window.addEventListener('resize', onResize);
 
-    ScrollTrigger.create({
+    const disposeScroll = createQualityScroll({
       trigger: section,
       start:   'top bottom',    // traveller starts moving when about enters viewport
       end:     'top 18%',       // fully landed when about section is near top
-      scrub:   1.2,             // smooth lag behind scroll (feels weighty)
-      onUpdate(self) {
-        const p = self.progress;   // 0 → 1
-        proxy.progress = p;
+      onLeaveBack() {
+        gsap.to(traveller, { opacity: 0, duration: 0.3 });
+      },
+    }, (p) => {
 
         // Recalculate dest each frame (handles slow reflows)
         dest = getAnchorCentre(anchor, currentEndSize);
@@ -227,12 +225,6 @@ export default function AboutSection() {
           document.querySelectorAll<HTMLElement>('.skill-pill')
             .forEach(pill => gsap.set(pill, { opacity: 0, y: 10 }));
         }
-      },
-
-      onLeaveBack() {
-        // Fully left about section going back up — hide traveller
-        gsap.to(traveller, { opacity: 0, duration: 0.3 });
-      },
     });
 
     // ── Landing sequence — called once traveller reaches destination ──────
@@ -332,7 +324,9 @@ export default function AboutSection() {
       window.removeEventListener('resize', onResize);
       section.removeEventListener('mousemove', onMouseMove);
       section.removeEventListener('mouseleave', onMouseLeave);
-      ScrollTrigger.getAll().forEach(t => t.kill());
+      disposeScroll();
+      initialized.current = false;
+      hasLanded.current = false;
     };
   }, []);
 

@@ -3,6 +3,8 @@ import { FontLoader } from 'three/examples/jsm/loaders/FontLoader.js';
 import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { expose } from 'comlink';
 import type { QualityPreset } from '../utils/qualityPresets';
+import { FrameRateSampler } from '../utils/frameRate';
+import { createSceneBloom } from '../utils/sceneBloom';
 
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
@@ -10,17 +12,25 @@ let renderer: THREE.WebGLRenderer;
 let group: THREE.Group;
 let textMesh: THREE.Mesh;
 let animationFrameId: number;
+let visible = false;
+let disposed = false;
+let renderFrame: ((now: number) => void) | null = null;
+let bloom: ReturnType<typeof createSceneBloom> | null = null;
+const sampler = new FrameRateSampler();
 
 let mouseX = 0;
 let mouseY = 0;
 
 const api = {
-  init: (canvas: OffscreenCanvas, width: number, height: number, pixelRatio: number, preset: QualityPreset | null) => {
+  init: (canvas: OffscreenCanvas, width: number, height: number, pixelRatio: number, preset: QualityPreset | null, reportFPS: (fps: number | null) => void) => {
 
     const nearDist = 0.1;
     const farDist = 10000;
 
     scene = new THREE.Scene();
+    // Scene backgrounds are cleared in the render target's color space, which
+    // keeps the cyan identical with and without post-processing.
+    scene.background = new THREE.Color('#4DD0E1');
     camera = new THREE.PerspectiveCamera(75, width / height, nearDist, farDist);
 
     const getResponsiveZ = (w: number) => {
@@ -31,7 +41,7 @@ const api = {
     };
     camera.position.z = getResponsiveZ(width);
 
-    const finalPixelRatio = preset?.pixelRatio ?? Math.min(pixelRatio, window?.devicePixelRatio || 2);
+    const finalPixelRatio = preset?.pixelRatio ?? Math.min(pixelRatio, 2);
     const antialias = preset?.antialias ?? true;
 
     renderer = new THREE.WebGLRenderer({ 
@@ -43,6 +53,7 @@ const api = {
     renderer.setClearColor("#4DD0E1");
     renderer.setPixelRatio(finalPixelRatio);
     renderer.setSize(width, height, false);
+    if (preset?.postProcessingEnabled && preset.bloomEnabled) bloom = createSceneBloom(renderer, scene, camera);
 
     // Lights
     const ambientLightIntensity = preset?.ambientLightIntensity ?? 0.64;
@@ -89,6 +100,7 @@ const api = {
     textMesh = new THREE.Mesh();
     // Use fast cdn url instead of official domain rate-limiting or slow speeds
     loader.load('https://cdn.jsdelivr.net/npm/three@0.149.0/examples/fonts/helvetiker_regular.typeface.json', (font) => { 
+      if (disposed) return;
       const isMobile = width < 480;
       const isTablet = width >= 480 && width < 768;
       // Drastically increased scale for high-impact mobile legibility (~double the delta of previous adjustment)
@@ -134,7 +146,8 @@ const api = {
       scene.add(textMesh);
     });
 
-    const render = () => {
+    const render = (now: number) => {
+      if (!visible || disposed) return;
       const t = Date.now() * 0.001;
       const rx = Math.sin(t * 0.7) * 0.5;
       const ry = Math.sin(t * 0.3) * 0.5;
@@ -153,11 +166,21 @@ const api = {
         textMesh.rotation.z = rz * textRotationMultiplier;
       }
 
-      renderer.render(scene, camera);
+      if (bloom) bloom.render();
+      else renderer.render(scene, camera);
+      const fps = sampler.frame(now);
+      if (fps !== null) void reportFPS(fps);
       animationFrameId = self.requestAnimationFrame(render);
     };
 
-    render();
+    renderFrame = render;
+  },
+  setVisible: (next: boolean) => {
+    if (next === visible || disposed) return;
+    visible = next;
+    self.cancelAnimationFrame(animationFrameId);
+    sampler.reset();
+    if (visible && renderFrame) animationFrameId = self.requestAnimationFrame(renderFrame);
   },
   onMouseMove: (x: number, y: number) => {
     mouseX = x;
@@ -176,11 +199,24 @@ const api = {
 
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
+      bloom?.resize();
     }
   },
   cleanup: () => {
     self.cancelAnimationFrame(animationFrameId);
-    // You might need to dispose of geometries, materials, etc.
+    disposed = true;
+    bloom?.dispose();
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    scene.traverse(object => {
+      if (object instanceof THREE.Mesh) {
+        geometries.add(object.geometry);
+        (Array.isArray(object.material) ? object.material : [object.material]).forEach(material => materials.add(material));
+      }
+    });
+    geometries.forEach(geometry => geometry.dispose());
+    materials.forEach(material => material.dispose());
+    renderer.dispose();
   },
 };
 

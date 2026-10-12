@@ -22,6 +22,7 @@
 import { useEffect, useRef } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { createQualityScroll } from '@/utils/qualityScroll';
 import './ProjectsSection.css';
 
 gsap.registerPlugin(ScrollTrigger);
@@ -30,33 +31,49 @@ gsap.registerPlugin(ScrollTrigger);
 const PROJECTS = [
   {
     id: 'proj-1',
-    title: 'E-Commerce Platform',
-    description: 'Full-stack marketplace with real-time inventory',
-    image: 'https://images.unsplash.com/photo-1557821552-17105176677c?w=400&h=400&fit=crop',
-    tech: ['Next.js', 'PostgreSQL', 'Stripe'],
+    title: 'Ken AI',
+    link: 'https://ken-ai.tech/',
+    description: 'A private AI assistant for thinking, creating, coding, and research.',
+    image: '/projects/ken-ai.png',
+    imagePosition: 'center center',
+    imageFit: 'contain',
+    imageBackground: '#111111',
+    tech: ['AI Assistant', 'Private AI', 'Productivity'],
   },
   {
     id: 'proj-2',
-    title: 'WebGL Experience',
-    description: 'Interactive 3D product configurator',
-    image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=400&h=400&fit=crop',
-    tech: ['Three.js', 'React', 'GSAP'],
+    title: 'Vital Rental',
+    link: 'https://www.vitalrental.com.au/',
+    description: 'Flexible car rental, rent-to-own, and rideshare solutions across Australia.',
+    image: '/projects/vital-rental.png',
+    imagePosition: 'calc(50% + 8px) center',
+    imageFit: 'contain',
+    imageBackground: '#ffffff',
+    tech: ['Car Rental', 'Rent To Own', 'Rideshare'],
   },
   {
     id: 'proj-3',
-    title: 'Analytics Dashboard',
-    description: 'Real-time data visualization platform',
-    image: 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&h=400&fit=crop',
-    tech: ['React', 'D3.js', 'Node.js'],
+    title: 'Sonitech Australia',
+    link: 'https://www.sonitech.com.au/',
+    description: 'Premium SaaS platforms and mobile applications built to drive innovation.',
+    image: '/projects/sonitech-australia.png',
+    imagePosition: 'center center',
+    imageFit: 'contain',
+    imageBackground: '#000000',
+    tech: ['SaaS', 'Mobile Apps', 'Technology'],
   },
   {
     id: 'proj-4',
-    title: 'AI Chat Interface',
-    description: 'Conversational AI with context awareness',
-    image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?w=400&h=400&fit=crop',
-    tech: ['TypeScript', 'OpenAI', 'WebSocket'],
+    title: 'Door To Door',
+    link: 'https://door-delivery-express.vercel.app/',
+    description: 'Fast, reliable delivery for parcels, gifts, and documents across Pakistan.',
+    image: '/projects/door-to-door.svg',
+    imagePosition: 'center center',
+    imageFit: 'contain',
+    imageBackground: '#f3f6ff',
+    tech: ['Delivery', 'Live Tracking', 'Logistics'],
   },
-];
+] as const;
 
 // ─── Helper Functions ────────────────────────────────────────────────────
 function getAboutBubbleCenter(): { x: number; y: number } {
@@ -77,6 +94,7 @@ export default function ProjectsSection() {
   const travellerRef = useRef<HTMLDivElement>(null);
   const splitBallsRef = useRef<(HTMLDivElement | null)[]>([]);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
+
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -142,13 +160,11 @@ export default function ProjectsSection() {
     gsap.set('.projects-header', { opacity: 0 });
 
     // ── Scroll Animation Timeline ──────────────────────────────────────
-    ScrollTrigger.create({
+    const disposeScroll = createQualityScroll({
       trigger: section,
       start: 'top bottom',
       end: 'bottom bottom',
-      scrub: 1.2,
-      onUpdate: (self) => {
-        const p = self.progress;
+    }, (p) => {
 
         // Recalculate positions each frame
         const about = getAboutBubbleCenter();
@@ -295,7 +311,6 @@ export default function ProjectsSection() {
             });
           });
         }
-      },
     });
 
     // ── Mobile: Auto-scroll cards horizontally ─────────   
@@ -310,7 +325,8 @@ export default function ProjectsSection() {
 
     // ── Cleanup ────────────────────────────────────────────────────────        
     return () => {
-      ScrollTrigger.getAll().forEach(t => t.kill());
+      disposeScroll();
+      initialized.current = false;
       if (cardsContainer) {
         gsap.killTweensOf(cardsContainer);
       }
@@ -352,27 +368,40 @@ export default function ProjectsSection() {
           {/* Cards Container */}
           <div className="projects-cards" ref={cardsContainerRef}>
             {PROJECTS.map((project) => (
-              <div 
+              <a
                 key={project.id} 
                 className="project-card"
-                onClick={() => {
-                  // You can customize this click behavior
-                  console.log('Clicked project:', project.title);
-                  // Example: open project in new tab, show modal, navigate, etc.
-                  // window.open(project.link, '_blank');
-                }}
+                href={project.link}
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 
                 {/* Ball with project image */}
                 <div className="project-ball-anchor">
-                  <div className="project-ball">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={project.image}
-                      alt={project.title}
-                      draggable={false}
-                      loading="lazy"
-                    />
+                  <div className="project-ball" style={{ background: project.imageBackground }}>
+                    {project.id === 'proj-3' ? (
+                      <div className="project-wordmark" role="img" aria-label="Sonitech Australia">
+                        <span className="sonitech-wordmark">Sonitech</span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={project.image}
+                          alt={project.title}
+                          draggable={false}
+                          loading="lazy"
+                          style={{
+                            objectPosition: project.imagePosition,
+                            objectFit: project.imageFit,
+                            padding: project.id === 'proj-4' ? '33%' : '16px',
+                            borderRadius: project.id === 'proj-4' ? 0 : undefined,
+                            boxSizing: 'border-box',
+                            filter: 'none',
+                          }}
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -386,7 +415,7 @@ export default function ProjectsSection() {
                     ))}
                   </div>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
 

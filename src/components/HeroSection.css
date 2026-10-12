@@ -76,6 +76,10 @@ button {
   cursor: pointer;
 }
 
+body .dg.ac {
+  z-index: 100;
+}
+
   .mouse-effect {
     opacity: 0;
     position: fixed;
@@ -85,7 +89,7 @@ button {
     pointer-events: none;
   }.circle {
   position: absolute;
-  background-color: var(--black-color);
+  background-color: #000000;
   width: 10px;
   height: 10px;
   left: 0px;
@@ -99,7 +103,7 @@ button {
 
 .circle-follow {
   position: absolute;
-  border: 1px solid var(--black-color);
+  border: 1px solid #000000;
   width: 40px;
   height: 40px;
   left: 0px;
@@ -109,6 +113,22 @@ button {
   user-select: none;
   pointer-events: none;
   transition: all 0.1s;
+}
+
+/* Threshold the backdrop to black/white, independently at each cursor pixel. */
+@supports ((backdrop-filter: invert(1)) or (-webkit-backdrop-filter: invert(1))) {
+  .mouse-effect .circle,
+  .mouse-effect .circle-follow {
+    background-color: transparent;
+    -webkit-backdrop-filter: grayscale(1) brightness(4) contrast(10000) invert(1);
+    backdrop-filter: grayscale(1) brightness(4) contrast(10000) invert(1);
+  }
+
+  .mouse-effect .circle-follow {
+    border: none;
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1px), #000000 calc(100% - 1px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 1px), #000000 calc(100% - 1px));
+  }
 }
 
 .ham-btn {
@@ -534,6 +554,15 @@ button {
   }
   .banner-inner .bottom-desc .right-desc .desc-inner {
     gap: 20px;
+  }
+}
+
+@media (min-width: 1200px) and (hover: hover) and (pointer: fine) {
+  html.custom-cursor-active,
+  html.custom-cursor-active *,
+  html.custom-cursor-active *::before,
+  html.custom-cursor-active *::after {
+    cursor: none !important;
   }
 }
 

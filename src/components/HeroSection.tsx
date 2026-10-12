@@ -5,19 +5,17 @@ import gsap from 'gsap';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { getDeviceConfig } from '@/utils/deviceConfig';
+import { getDeviceConfig, QUALITY_UPDATED, reportSceneFPS } from '@/utils/deviceConfig';
 import { getQualityPreset } from '@/utils/qualityPresets';
+import { FrameRateSampler } from '@/utils/frameRate';
+import { createSceneBloom } from '@/utils/sceneBloom';
 import './HeroSection.css';
 
 export default function HeroSection() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const initialized = useRef(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-
     // Get detected device tier and preset
     let deviceTier = 'MEDIUM'; // default fallback
     let preset = null;
@@ -88,11 +86,16 @@ export default function HeroSection() {
     renderer.setPixelRatio(pixelRatio);
     renderer.shadowMap.enabled = shadowsEnabled;
     renderer.shadowMap.type = THREE[`${shadowMapType}` as keyof typeof THREE] as THREE.ShadowMapType;
+    let bloom = preset.postProcessingEnabled && preset.bloomEnabled ? createSceneBloom(renderer, scene, camera, true) : null;
 
     // Add RoomEnvironment for ultra-realistic soft lighting
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
     pmremGenerator.compileEquirectangularShader();
-    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), roomEnvQuality).texture;
+    const room = new RoomEnvironment();
+    const environment = pmremGenerator.fromScene(room, roomEnvQuality);
+    scene.environment = environment.texture;
+    room.dispose();
+    pmremGenerator.dispose();
 
       
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -265,6 +268,7 @@ gui.close(); // Double ensure it's closed by default
         }
 
         renderer.setSize(width, height);
+        bloom?.resize();
       };
 
       // Call first time
@@ -285,6 +289,38 @@ gui.close(); // Double ensure it's closed by default
 
       const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffe6f0, 0.4);
       scene.add(hemiLight);
+
+      const applyQuality = () => {
+        preset = getDeviceConfig().preset;
+        renderer.setPixelRatio(preset.pixelRatio);
+        renderer.shadowMap.enabled = preset.shadowsEnabled;
+        dirLight.castShadow = preset.shadowsEnabled;
+        ambientLight.intensity = preset.ambientLightIntensity;
+        dirLight.intensity = preset.directionalLightIntensity;
+        const previousMaterial = material;
+        const materialProps = { color: params.color, emissive: params.emissive, roughness: params.roughness, metalness: params.metalness };
+        material = preset.materialType === 'MeshBasicMaterial'
+          ? new THREE.MeshBasicMaterial({ color: params.color })
+          : preset.materialType === 'MeshStandardMaterial'
+            ? new THREE.MeshStandardMaterial(materialProps)
+            : new THREE.MeshPhysicalMaterial({ ...materialProps, clearcoat: params.clearcoat, clearcoatRoughness: 0.2 });
+        spheres.forEach(sphere => {
+          sphere.geometry.dispose();
+          sphere.geometry = new THREE.SphereGeometry(sphere.userData.radius, preset!.sphereSegments, preset!.sphereSegments);
+          sphere.castShadow = sphere.receiveShadow = preset!.shadowsEnabled;
+          sphere.material = material;
+        });
+        previousMaterial.dispose();
+        if (preset.postProcessingEnabled && preset.bloomEnabled) {
+          bloom ??= createSceneBloom(renderer, scene, camera, true);
+          bloom.resize();
+        } else {
+          bloom?.dispose();
+          bloom = null;
+        }
+        sampler.reset();
+      };
+      window.addEventListener(QUALITY_UPDATED, applyQuality);
 
       const guiLights = gui.addFolder('Lights');
       guiLights.add(params, 'ambientLight', 0, 3).onChange((v: number) => { ambientLight.intensity = v; });
@@ -309,11 +345,12 @@ gui.close(); // Double ensure it's closed by default
       });
 
       let loadingComplete = false;
+      const introTimelines: gsap.core.Timeline[] = [];
 
       const initLoadingAnimation = () => {
         spheres.forEach((sphere, i) => {
           const delay = i * 0.02;
-          gsap.timeline()
+          const timeline = gsap.timeline()
             .to(sphere.position, {
               duration: revolutionDuration / 2,
               y: revolutionRadius,
@@ -340,6 +377,7 @@ gui.close(); // Double ensure it's closed by default
               z: sphere.userData.originalPosition.z,
               ease: 'power1.out'
             });
+          introTimelines.push(timeline);
         });
       };
 
@@ -353,7 +391,7 @@ gui.close(); // Double ensure it's closed by default
         (el as HTMLElement).style.opacity = '0';
       });
 
-      setTimeout(() => {
+      const loadingTimer = setTimeout(() => {
         loadingComplete = true;
         hiddenElements.forEach(el => {
           (el as HTMLElement).style.opacity = '1';
@@ -375,7 +413,10 @@ gui.close(); // Double ensure it's closed by default
         yTo(event.clientY);
         xFollow(event.clientX);
         yFollow(event.clientY);
-        if (mouseEffect) (mouseEffect as HTMLElement).style.opacity = '1';
+        if (mouseEffect) {
+          (mouseEffect as HTMLElement).style.opacity = '1';
+          document.documentElement.classList.add('custom-cursor-active');
+        }
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -389,6 +430,11 @@ gui.close(); // Double ensure it's closed by default
           force.subVectors(intersects[0].point, hoveredSphere.position).normalize().multiplyScalar(0.2);
           forces.set(hoveredSphere.uuid, force);
         }
+      };
+
+      const hideCustomCursor = () => {
+        if (mouseEffect) (mouseEffect as HTMLElement).style.opacity = '0';
+        document.documentElement.classList.remove('custom-cursor-active');
       };
 
       const handleCollisions = () => {
@@ -413,8 +459,12 @@ gui.close(); // Double ensure it's closed by default
         }
       };
 
-      const animate = () => {
-        requestAnimationFrame(animate);
+      const sampler = new FrameRateSampler();
+      let animationFrame = 0;
+      let inViewport = false;
+      const animate = (now: number) => {
+        animationFrame = 0;
+        if (document.hidden || !inViewport) return;
 
         if (loadingComplete) {
           const time = Date.now() * breathingSpeed;
@@ -439,17 +489,58 @@ gui.close(); // Double ensure it's closed by default
         }
 
         controls.update();
-        renderer.render(scene, camera);
+        if (bloom) bloom.render();
+        else renderer.render(scene, camera);
+        if (loadingComplete) {
+          const fps = sampler.frame(now);
+          if (fps !== null) reportSceneFPS('hero', fps);
+        }
+        animationFrame = requestAnimationFrame(animate);
       };
 
+      const updateVisibility = () => {
+        sampler.reset();
+        reportSceneFPS('hero', null);
+        if (inViewport && !document.hidden) {
+          if (!animationFrame) animationFrame = requestAnimationFrame(animate);
+        } else {
+          cancelAnimationFrame(animationFrame);
+          animationFrame = 0;
+        }
+      };
+      const observer = new IntersectionObserver(([entry]) => {
+        inViewport = entry.isIntersecting && entry.intersectionRatio > 0;
+        updateVisibility();
+      });
+      observer.observe(containerRef.current!);
+      document.addEventListener('visibilitychange', updateVisibility);
+
       window.addEventListener('mousemove', onMouseMove);
-      animate();
+      document.documentElement.addEventListener('mouseleave', hideCustomCursor);
+      window.addEventListener('blur', hideCustomCursor);
 
       return () => {
+        observer.disconnect();
+        document.removeEventListener('visibilitychange', updateVisibility);
+        window.removeEventListener(QUALITY_UPDATED, applyQuality);
+        cancelAnimationFrame(animationFrame);
+        reportSceneFPS('hero', null);
+        clearTimeout(loadingTimer);
+        introTimelines.forEach(timeline => timeline.kill());
+        [xTo, yTo, xFollow, yFollow].forEach(move => move.tween.kill());
         window.removeEventListener('mousemove', onMouseMove);
+        document.documentElement.removeEventListener('mouseleave', hideCustomCursor);
+        window.removeEventListener('blur', hideCustomCursor);
+        hideCustomCursor();
         window.removeEventListener('resize', handleResize);
         gui.destroy();
-        // We could also dispose of renderer, etc.
+        controls.dispose();
+        bloom?.dispose();
+        spheres.forEach(sphere => sphere.geometry.dispose());
+        material.dispose();
+        dirLight.shadow.dispose();
+        environment.dispose();
+        renderer.dispose();
       };
   }, []);
 
