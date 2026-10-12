@@ -375,7 +375,10 @@ gui.close(); // Double ensure it's closed by default
         yTo(event.clientY);
         xFollow(event.clientX);
         yFollow(event.clientY);
-        if (mouseEffect) (mouseEffect as HTMLElement).style.opacity = '1';
+        if (mouseEffect) {
+          (mouseEffect as HTMLElement).style.opacity = '1';
+          document.documentElement.classList.add('custom-cursor-active');
+        }
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -389,6 +392,11 @@ gui.close(); // Double ensure it's closed by default
           force.subVectors(intersects[0].point, hoveredSphere.position).normalize().multiplyScalar(0.2);
           forces.set(hoveredSphere.uuid, force);
         }
+      };
+
+      const hideCustomCursor = () => {
+        if (mouseEffect) (mouseEffect as HTMLElement).style.opacity = '0';
+        document.documentElement.classList.remove('custom-cursor-active');
       };
 
       const handleCollisions = () => {
@@ -443,10 +451,15 @@ gui.close(); // Double ensure it's closed by default
       };
 
       window.addEventListener('mousemove', onMouseMove);
+      document.documentElement.addEventListener('mouseleave', hideCustomCursor);
+      window.addEventListener('blur', hideCustomCursor);
       animate();
 
       return () => {
         window.removeEventListener('mousemove', onMouseMove);
+        document.documentElement.removeEventListener('mouseleave', hideCustomCursor);
+        window.removeEventListener('blur', hideCustomCursor);
+        hideCustomCursor();
         window.removeEventListener('resize', handleResize);
         gui.destroy();
         // We could also dispose of renderer, etc.
