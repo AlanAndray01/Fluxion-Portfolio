@@ -25,32 +25,3 @@ export class FrameRateSampler {
     return fps;
   }
 }
-
-type Tier = 'LOW' | 'MEDIUM' | 'HIGH';
-
-/** Only step down after warmup and sustained pressure. Never override a manual choice. */
-export class AdaptiveQualityPolicy {
-  private warmupUntil = 0;
-  private slowSince: number | null = null;
-  private previous: number | null = null;
-
-  reset(now: number) {
-    this.warmupUntil = now + 8000;
-    this.slowSince = this.previous = null;
-  }
-
-  sample(fps: number, now: number, tier: Tier, manual: boolean): Tier | null {
-    const gap = this.previous !== null && now - this.previous > 2500;
-    this.previous = now;
-    if (gap) this.reset(now);
-    if (!Number.isFinite(fps) || fps <= 0 || manual || tier === 'LOW' || now < this.warmupUntil || fps >= 35) {
-      this.slowSince = null;
-      return null;
-    }
-    this.slowSince ??= now;
-    if (now - this.slowSince < 5000) return null;
-    this.reset(now);
-    this.warmupUntil = now + 15000;
-    return tier === 'HIGH' ? 'MEDIUM' : 'LOW';
-  }
-}

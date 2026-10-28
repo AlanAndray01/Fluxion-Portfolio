@@ -1,7 +1,7 @@
 /**
  * Quality Presets Configuration
  * Defines rendering parameters for each device tier
- * Applied at initialization and when automatic quality changes during a session.
+ * Selected at initialization and kept fixed unless the user changes quality.
  */
 
 import * as THREE from 'three';
@@ -41,10 +41,6 @@ export interface QualityPreset {
   directionalLightIntensity: number;
   pointLightCount: number;
   
-  // Post-processing
-  postProcessingEnabled: boolean;
-  bloomEnabled: boolean;
-  
   // Animations
   gsapAnimationsEnabled: boolean;
   gsapScrubValue: number; // Seconds for scroll animations to catch up; lower is more responsive.
@@ -82,8 +78,6 @@ export const qualityPresets: Record<DeviceTier, QualityPreset> = {
     ambientLightIntensity: 0.8,
     directionalLightIntensity: 0.6,
     pointLightCount: 0,
-    postProcessingEnabled: false,
-    bloomEnabled: false,
     gsapAnimationsEnabled: true, // Basic animations only
     gsapScrubValue: 2.0, // Heavier scrub = less responsive but smoother
     particleEffectsEnabled: false,
@@ -112,8 +106,6 @@ export const qualityPresets: Record<DeviceTier, QualityPreset> = {
     ambientLightIntensity: 0.64,
     directionalLightIntensity: 0.9,
     pointLightCount: 1,
-    postProcessingEnabled: false,
-    bloomEnabled: false,
     gsapAnimationsEnabled: true,
     gsapScrubValue: 1.2, // Moderate scrub
     particleEffectsEnabled: false,
@@ -143,8 +135,6 @@ export const qualityPresets: Record<DeviceTier, QualityPreset> = {
     ambientLightIntensity: 0.64,
     directionalLightIntensity: 1.1,
     pointLightCount: 2,
-    postProcessingEnabled: true,
-    bloomEnabled: true,
     gsapAnimationsEnabled: true,
     gsapScrubValue: 0.6, // Responsive scrub
     particleEffectsEnabled: true,

@@ -89,7 +89,8 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
               {isOverridden && (
                 <p className="override-note">Manual override active</p>
               )}
-              {!isOverridden && <p className="override-note">{config.autoAdjusted ? 'Auto: adjusted for smoother playback' : 'Auto quality active'}</p>}
+              {!isOverridden && <p className="override-note">Selected for your device</p>}
+              <p className="override-note">Quality stays fixed until you change it.</p>
             </div>
 
             {/* Tier Selection Buttons */}
@@ -123,7 +124,7 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
             {/* Reset Button */}
             {isOverridden && (
               <button className="reset-btn" onClick={handleReset}>
-                Reset to Auto-Detection
+                Reset to Device Default
               </button>
             )}
 
@@ -132,10 +133,6 @@ export default function QualitySettingsPanel({ isVisible = true }: QualitySettin
               <div className="stat">
                 <span className="stat-label">Live FPS:</span>
                 <span className="stat-value" data-testid="live-fps">{config.liveFPS === null ? 'Paused' : Math.round(config.liveFPS)}</span>
-              </div>
-              <div className="stat">
-                <span className="stat-label">Bloom:</span>
-                <span className="stat-value">{config.preset.postProcessingEnabled && config.preset.bloomEnabled ? 'On' : 'Off'}</span>
               </div>
               <div className="stat">
                 <span className="stat-label">CPU Cores:</span>

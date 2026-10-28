@@ -45,7 +45,6 @@ const SKILLS = [
   'PostgreSQL',
   'REST & GraphQL',
   'Tailwind CSS',
-  'Docker / CI',
   'GSAP',
 ];
 
@@ -379,7 +378,7 @@ export default function AboutSection() {
             </h2>
 
             <p className="about-role">
-              Creative Technologist &amp; WebGL Engineer
+              MERN/Full Stack Developer
             </p>
 
             <p className="about-description">
