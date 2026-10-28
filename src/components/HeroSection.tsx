@@ -8,7 +8,6 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { getDeviceConfig, QUALITY_UPDATED, reportSceneFPS } from '@/utils/deviceConfig';
 import { getQualityPreset } from '@/utils/qualityPresets';
 import { FrameRateSampler } from '@/utils/frameRate';
-import { createSceneBloom } from '@/utils/sceneBloom';
 import './HeroSection.css';
 
 export default function HeroSection() {
@@ -86,7 +85,6 @@ export default function HeroSection() {
     renderer.setPixelRatio(pixelRatio);
     renderer.shadowMap.enabled = shadowsEnabled;
     renderer.shadowMap.type = THREE[`${shadowMapType}` as keyof typeof THREE] as THREE.ShadowMapType;
-    let bloom = preset.postProcessingEnabled && preset.bloomEnabled ? createSceneBloom(renderer, scene, camera, true) : null;
 
     // Add RoomEnvironment for ultra-realistic soft lighting
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -268,7 +266,6 @@ gui.close(); // Double ensure it's closed by default
         }
 
         renderer.setSize(width, height);
-        bloom?.resize();
       };
 
       // Call first time
@@ -311,13 +308,6 @@ gui.close(); // Double ensure it's closed by default
           sphere.material = material;
         });
         previousMaterial.dispose();
-        if (preset.postProcessingEnabled && preset.bloomEnabled) {
-          bloom ??= createSceneBloom(renderer, scene, camera, true);
-          bloom.resize();
-        } else {
-          bloom?.dispose();
-          bloom = null;
-        }
         sampler.reset();
       };
       window.addEventListener(QUALITY_UPDATED, applyQuality);
@@ -385,7 +375,7 @@ gui.close(); // Double ensure it's closed by default
 
       const hiddenElements = document.querySelectorAll('.hide-text');
       const mainTxt = document.querySelector('.main-txt');
-      const mouseEffect = document.querySelector('.mouse-effect');
+      const mouseEffect = document.querySelector<HTMLElement>('.mouse-effect');
 
       hiddenElements.forEach(el => {
         (el as HTMLElement).style.opacity = '0';
@@ -399,24 +389,15 @@ gui.close(); // Double ensure it's closed by default
         if (mainTxt) (mainTxt as HTMLElement).style.opacity = '0';
       }, (revolutionDuration + 1) * 1000);
 
-      gsap.set('.circle', {xPercent: -50, yPercent: -50});
-      gsap.set('.circle-follow', {xPercent: -50, yPercent: -50});
-
-      const xTo = gsap.quickTo('.circle', 'x', {duration: 0.6, ease: 'power3'});
-      const yTo = gsap.quickTo('.circle', 'y', {duration: 0.6, ease: 'power3'});
-      const xFollow = gsap.quickTo('.circle-follow', 'x', {duration: 0.6, ease: 'power3'});
-      const yFollow = gsap.quickTo('.circle-follow', 'y', {duration: 0.6, ease: 'power3'});
-
       const onMouseMove = (event: MouseEvent) => {
-        if (!loadingComplete) return;
-        xTo(event.clientX);
-        yTo(event.clientY);
-        xFollow(event.clientX);
-        yFollow(event.clientY);
+        // Move both cursor shapes together on this event, without easing or a trail.
         if (mouseEffect) {
-          (mouseEffect as HTMLElement).style.opacity = '1';
+          mouseEffect.style.transform = `translate3d(${event.clientX}px, ${event.clientY}px, 0)`;
+          mouseEffect.style.opacity = '1';
           document.documentElement.classList.add('custom-cursor-active');
         }
+
+        if (!loadingComplete || !inViewport || document.hidden) return;
 
         mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
         mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -489,8 +470,7 @@ gui.close(); // Double ensure it's closed by default
         }
 
         controls.update();
-        if (bloom) bloom.render();
-        else renderer.render(scene, camera);
+        renderer.render(scene, camera);
         if (loadingComplete) {
           const fps = sampler.frame(now);
           if (fps !== null) reportSceneFPS('hero', fps);
@@ -527,7 +507,6 @@ gui.close(); // Double ensure it's closed by default
         reportSceneFPS('hero', null);
         clearTimeout(loadingTimer);
         introTimelines.forEach(timeline => timeline.kill());
-        [xTo, yTo, xFollow, yFollow].forEach(move => move.tween.kill());
         window.removeEventListener('mousemove', onMouseMove);
         document.documentElement.removeEventListener('mouseleave', hideCustomCursor);
         window.removeEventListener('blur', hideCustomCursor);
@@ -535,7 +514,6 @@ gui.close(); // Double ensure it's closed by default
         window.removeEventListener('resize', handleResize);
         gui.destroy();
         controls.dispose();
-        bloom?.dispose();
         spheres.forEach(sphere => sphere.geometry.dispose());
         material.dispose();
         dirLight.shadow.dispose();

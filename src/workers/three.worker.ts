@@ -4,7 +4,6 @@ import { TextGeometry } from 'three/examples/jsm/geometries/TextGeometry.js';
 import { expose } from 'comlink';
 import type { QualityPreset } from '../utils/qualityPresets';
 import { FrameRateSampler } from '../utils/frameRate';
-import { createSceneBloom } from '../utils/sceneBloom';
 
 let scene: THREE.Scene;
 let camera: THREE.PerspectiveCamera;
@@ -15,7 +14,6 @@ let animationFrameId: number;
 let visible = false;
 let disposed = false;
 let renderFrame: ((now: number) => void) | null = null;
-let bloom: ReturnType<typeof createSceneBloom> | null = null;
 const sampler = new FrameRateSampler();
 
 let mouseX = 0;
@@ -28,8 +26,7 @@ const api = {
     const farDist = 10000;
 
     scene = new THREE.Scene();
-    // Scene backgrounds are cleared in the render target's color space, which
-    // keeps the cyan identical with and without post-processing.
+    // Keep the scene background consistent with the surrounding cyan section.
     scene.background = new THREE.Color('#4DD0E1');
     camera = new THREE.PerspectiveCamera(75, width / height, nearDist, farDist);
 
@@ -53,7 +50,6 @@ const api = {
     renderer.setClearColor("#4DD0E1");
     renderer.setPixelRatio(finalPixelRatio);
     renderer.setSize(width, height, false);
-    if (preset?.postProcessingEnabled && preset.bloomEnabled) bloom = createSceneBloom(renderer, scene, camera);
 
     // Lights
     const ambientLightIntensity = preset?.ambientLightIntensity ?? 0.64;
@@ -166,8 +162,7 @@ const api = {
         textMesh.rotation.z = rz * textRotationMultiplier;
       }
 
-      if (bloom) bloom.render();
-      else renderer.render(scene, camera);
+      renderer.render(scene, camera);
       const fps = sampler.frame(now);
       if (fps !== null) void reportFPS(fps);
       animationFrameId = self.requestAnimationFrame(render);
@@ -199,13 +194,11 @@ const api = {
 
       camera.updateProjectionMatrix();
       renderer.setSize(width, height, false);
-      bloom?.resize();
     }
   },
   cleanup: () => {
     self.cancelAnimationFrame(animationFrameId);
     disposed = true;
-    bloom?.dispose();
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     scene.traverse(object => {

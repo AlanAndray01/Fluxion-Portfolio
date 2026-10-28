@@ -98,7 +98,8 @@ body .dg.ac {
   z-index: 111111;
   user-select: none;
   pointer-events: none;
-  transition: all 0.05s;
+  transform: translate(-50%, -50%);
+  transition: none;
 }
 
 .circle-follow {
@@ -112,7 +113,8 @@ body .dg.ac {
   z-index: 111111;
   user-select: none;
   pointer-events: none;
-  transition: all 0.1s;
+  transform: translate(-50%, -50%);
+  transition: none;
 }
 
 /* Threshold the backdrop to black/white, independently at each cursor pixel. */

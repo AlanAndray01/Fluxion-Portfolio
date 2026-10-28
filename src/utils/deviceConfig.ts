@@ -6,11 +6,9 @@
 
 import { DeviceTier, PerformanceMetrics } from './performanceDetector';
 import { QualityPreset, getQualityPreset } from './qualityPresets';
-import { AdaptiveQualityPolicy } from './frameRate';
 
 export const CONFIG_UPDATED = 'device-config-updated';
 export const QUALITY_UPDATED = 'quality-tier-updated';
-const adaptivePolicy = new AdaptiveQualityPolicy();
 const frameRates = new Map<string, { fps: number; time: number }>();
 
 function publish(config: DeviceConfigStore, qualityChanged = false) {
@@ -28,7 +26,6 @@ export interface DeviceConfigStore {
   userOverride: DeviceTier | null;
   detectionTime: number;
   liveFPS: number | null;
-  autoAdjusted: boolean;
 }
 
 declare global {
@@ -61,14 +58,12 @@ export function initializeDeviceConfig(metrics: PerformanceMetrics): DeviceConfi
     userOverride,
     detectionTime: metrics.timestamp,
     liveFPS: null,
-    autoAdjusted: false,
   };
 
   // Store globally
   if (typeof window !== 'undefined') {
     window.__DEVICE_CONFIG__ = config;
     frameRates.clear();
-    adaptivePolicy.reset(performance.now());
   }
 
   return config;
@@ -95,8 +90,7 @@ export function overrideQualityTier(tier: DeviceTier): DeviceConfigStore {
     localStorage.setItem('__QUALITY_OVERRIDE__', tier);
     
     if (window.__DEVICE_CONFIG__) {
-      const config = { ...window.__DEVICE_CONFIG__, userOverride: tier, tier, preset: getQualityPreset(tier), autoAdjusted: false };
-      adaptivePolicy.reset(performance.now());
+      const config = { ...window.__DEVICE_CONFIG__, userOverride: tier, tier, preset: getQualityPreset(tier) };
 
       if (process.env.NODE_ENV === 'development') {
         console.log(`Quality tier manually overridden to: ${tier}`);
@@ -118,8 +112,7 @@ export function resetToAutoDetectedTier(): DeviceConfigStore {
     
     if (window.__DEVICE_CONFIG__) {
       const previous = window.__DEVICE_CONFIG__;
-      const config = { ...previous, userOverride: null, tier: previous.metrics.detectedTier, preset: getQualityPreset(previous.metrics.detectedTier), autoAdjusted: false };
-      adaptivePolicy.reset(performance.now());
+      const config = { ...previous, userOverride: null, tier: previous.metrics.detectedTier, preset: getQualityPreset(previous.metrics.detectedTier) };
 
       if (process.env.NODE_ENV === 'development') {
         console.log(`Reset to auto-detected tier: ${config.tier}`);
@@ -132,7 +125,7 @@ export function resetToAutoDetectedTier(): DeviceConfigStore {
   throw new Error('Device config not initialized');
 }
 
-/** Report actual scene frames, taking the slowest currently visible scene. */
+/** Report actual scene frames for display only. Quality stays fixed until the user changes it. */
 export function reportSceneFPS(source: string, fps: number | null) {
   if (typeof window === 'undefined' || !window.__DEVICE_CONFIG__) return;
   const now = performance.now();
@@ -143,13 +136,7 @@ export function reportSceneFPS(source: string, fps: number | null) {
   }
   const liveFPS = frameRates.size ? Math.min(...Array.from(frameRates.values(), sample => sample.fps)) : null;
   const config = getDeviceConfig();
-  if (document.hidden || liveFPS === null) {
-    adaptivePolicy.reset(now);
-    publish({ ...config, liveFPS: null });
-    return;
-  }
-  const nextTier = adaptivePolicy.sample(liveFPS, now, config.tier, config.userOverride !== null);
-  publish({ ...config, liveFPS, ...(nextTier ? { tier: nextTier, preset: getQualityPreset(nextTier), autoAdjusted: true } : {}) }, nextTier !== null);
+  publish({ ...config, liveFPS: document.hidden ? null : liveFPS });
 }
 
 /**
@@ -199,7 +186,6 @@ Device Tier: ${config.tier}
 Auto-detected: ${config.metrics.detectedTier}
 User Override: ${config.userOverride || 'None'}
 Live FPS: ${config.liveFPS === null ? 'Paused' : Math.round(config.liveFPS)}
-Auto-adjusted: ${config.autoAdjusted}
 CPU: ${config.metrics.cpuCores} cores
 RAM: ${config.metrics.ramGB}GB
 GPU: ${config.metrics.gpuInfo} (${config.metrics.gpuTier})
